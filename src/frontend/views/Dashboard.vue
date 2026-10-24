@@ -378,6 +378,7 @@ import { getTitle, hasMultipleApiBases, getApiBases, getPublicAssetUrl } from '.
 import { currentLang, useTranslation } from '../utils/i18n.js'
 import { TIME, DEFAULT_SITE_TITLE, STORAGE, LATENCY_WINDOW } from '../utils/constants'
 import { normalizeTimestamp as normalizeMetricTimestamp } from '../utils/time.js'
+import { mergeLiveLatencyWindow } from '../utils/latencyWindow.js'
 import { normalizeDashboardView, normalizeDisplayMode, resolveDisplayMode } from '../utils/displayMode.js'
 import { getPlaybackElapsedMs, resolvePlaybackCursor } from '../utils/playback.js'
 import { getMikusAssetUrl, isMikusThemeEnabled, normalizeThemeOptions, setMikusThemeClass } from '../utils/themeOptions.js'
@@ -858,6 +859,7 @@ const applyServerSample = (serverId, data, sampleTs, displayTs, reportTs = null)
   const existing = idx >= 0 ? servers.value[idx] : null
   const currentReportTs = getServerReportTimestamp(existing, null)
   const nextReportTs = normalizeMetricTimestamp(reportTs, currentReportTs || now.value)
+  const latencyWindow = mergeLiveLatencyWindow(existing, data, sampleTs, sysConfig.value.latency_window)
   const merged = withDisplayTiming({
     ...data,
     id: serverId,
@@ -868,9 +870,9 @@ const applyServerSample = (serverId, data, sampleTs, displayTs, reportTs = null)
   }, displayTs, now.value)
 
   if (idx >= 0) {
-    servers.value[idx] = { ...servers.value[idx], ...merged }
+    servers.value[idx] = { ...servers.value[idx], ...merged, ...latencyWindow }
   } else {
-    servers.value.push({ ...merged, name: serverId })
+    servers.value.push({ ...merged, ...latencyWindow, name: serverId })
   }
 }
 
@@ -1362,3 +1364,4 @@ onUnmounted(() => {
   if (themeObserver) themeObserver.disconnect()
 })
 </script>
+

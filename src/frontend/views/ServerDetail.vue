@@ -413,6 +413,7 @@ import { formatDateTime, normalizeTimestamp as normalizeMetricTimestamp } from '
 import useTheme from '../composables/useTheme'
 import { isDisabledProbeMetric } from '../utils/server.js'
 import { resolvePlaybackCursor } from '../utils/playback.js'
+import { getCurrentProbeMetric } from '../utils/latencyWindow.js'
 import { applyMikusThemeOptions } from '../utils/themeOptions.js'
 
 const route = useRoute()
@@ -439,6 +440,7 @@ const server = ref({})
 const REALTIME_HISTORY_HOURS = 0.167
 const LATEST_REPORT_MAX_REPLAY_DELAY = 120000
 const REPORT_CHART_UPDATE_INTERVAL_MS = 30000
+const PROBE_CHART_UPDATE_INTERVAL_MS = 3000
 const currentHours = ref(REALTIME_HISTORY_HOURS)
 const lastUpdateText = ref('')
 const config = ref(null)
@@ -709,6 +711,7 @@ const avgLossNode4 = ref(null)
 let isInitializingCharts = false
 let databaseUpgradeAlertShown = false
 let lastReportChartUpdateTime = 0
+let lastProbeChartUpdateTime = 0
 
 const isChartExpanded = (key) => !!expandedCharts.value[key]
 
@@ -777,7 +780,9 @@ const hasPingData = computed(() => visiblePingFields.value.length > 0)
 const visiblePingStats = computed(() => visiblePingFields.value.map(item => ({
   ...item,
   label: pingLabel(item.field.replace('ping_', '')),
-  value: avgPingRefs[item.field].value
+  value: isRealtimeHistoryRange()
+    ? getCurrentProbeMetric(server.value, item.field, avgPingRefs[item.field].value)
+    : avgPingRefs[item.field].value
 })))
 const visibleLossFields = computed(() => PING_FIELD_DEFS.filter(item => (
   server.value[item.field] !== undefined &&
@@ -788,7 +793,9 @@ const visibleLossStats = computed(() => visibleLossFields.value.map(item => ({
   ...item,
   field: item.lossField,
   label: pingLabel(item.field.replace('ping_', '')),
-  value: avgLossRefs[item.lossField].value
+  value: isRealtimeHistoryRange()
+    ? getCurrentProbeMetric(server.value, item.lossField, avgLossRefs[item.lossField].value)
+    : avgLossRefs[item.lossField].value
 })).filter(item => item.value !== null))
 
 const trafficUsageBytes = computed(() => getTrafficUsageBytes(server.value))
@@ -1361,6 +1368,7 @@ const loadAllHistory = async (hours) => {
   try {
     const allData = await fetchAllHistory(serverId, hours, apiIndex.value)
     lastReportChartUpdateTime = 0
+    lastProbeChartUpdateTime = 0
     lossHistoryFields.value = Object.fromEntries(PING_FIELD_DEFS.map(item => [
       item.lossField,
       allData.some(row => isLossValid(row[item.lossField]))
@@ -1371,6 +1379,7 @@ const loadAllHistory = async (hours) => {
         const rowTime = new Date(row.timestamp).getTime()
         return Number.isFinite(rowTime) ? Math.max(latest, rowTime) : latest
       }, 0)
+      lastProbeChartUpdateTime = lastReportChartUpdateTime
       updateChartDataset(charts.cpu, 0, allData, fieldAccessor('cpu', true))
       rebuildGpuChartDatasets()
       for (const chartKey of GPU_DETAIL_CHART_KEYS) {
@@ -1713,6 +1722,10 @@ const appendReportCharts = (data, dataTimestamp) => {
   appendDataToChart(charts.conn, 0, dataTimestamp, data.tcp_conn)
   appendDataToChart(charts.conn, 1, dataTimestamp, data.udp_conn)
 
+  appendLoadChartData(dataTimestamp, data.load_avg)
+}
+
+const appendProbeCharts = (data, dataTimestamp) => {
   // 与 WSS 一致：字段不存在(undefined)或为 false 时不产生图表点，
   // null 表示超时，保留为断点/超时提示。
   for (const item of PING_FIELD_DEFS) {
@@ -1724,12 +1737,18 @@ const appendReportCharts = (data, dataTimestamp) => {
     appendProbe(charts.ping, item.field, true)
     appendProbe(charts.loss, item.lossField, false)
   }
-
-  appendLoadChartData(dataTimestamp, data.load_avg)
 }
 
 const appendReportChartsThrottled = (data, dataTimestamp) => {
   if (!Number.isFinite(dataTimestamp)) return
+  const hasProbe = PING_FIELD_DEFS.some(item => (
+    (hasOwn(data, item.field) && data[item.field] !== undefined && !isDisabledProbeMetric(data[item.field])) ||
+    (hasOwn(data, item.lossField) && data[item.lossField] !== undefined && !isDisabledProbeMetric(data[item.lossField]))
+  ))
+  if (hasProbe && (!lastProbeChartUpdateTime || dataTimestamp - lastProbeChartUpdateTime >= PROBE_CHART_UPDATE_INTERVAL_MS)) {
+    appendProbeCharts(data, dataTimestamp)
+    lastProbeChartUpdateTime = dataTimestamp
+  }
   if (lastReportChartUpdateTime && dataTimestamp - lastReportChartUpdateTime < REPORT_CHART_UPDATE_INTERVAL_MS) {
     return
   }

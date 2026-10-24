@@ -306,6 +306,14 @@ npm run build:github-page
 | 数据库管理         | 升级数据库、清空历史数据                          |
 | Cloudflare 用量 | 查询 D1 行读写和 Workers 请求量                |
 
+### 延迟与丢包实时刷新
+
+本 Fork 的首页三网数值优先显示最新上报的延迟和丢包率，小条图随上报更新当前时间桶；缺失的丢包数据显示 `--`。详情页的实时视图也使用最新数值，延迟和丢包曲线独立按最短 3 秒间隔绘制新点。历史查询继续使用原有缓存，不新增高频 D1 轮询。
+
+如需几秒内收到上报，请在后台启用 Agent WSS 上报、配置有效开启时段，并将服务器连接模式设为 `auto`，WSS 上报间隔设为 2～3 秒。实际刷新取决于 Agent 是否连接成功；HTTP 模式仍受 HTTP 上报间隔限制。
+
+注意：上游 Go Agent `v1.0.20` / `v1.1.0` 的网络探测固定为每 20 秒一次，延迟使用 2 分钟中位数、丢包使用最近 6 次结果。此面板修改会及时展示已收到的数据，但不能让原客户端生成更频繁的新测量；要实现每几秒重新测量，仍需更换修改过探测调度和统计窗口的 Agent。
+
 ### iOS Scriptable 小组件
 
 项目提供 [scripts/ios-scriptable-widget.js](scripts/ios-scriptable-widget.js)，可在 iPhone 桌面显示单台服务器状态。
@@ -744,3 +752,4 @@ echo <CF_CDN_IP> <你的探针域名> | sudo tee -a /etc/hosts
 ## 许可证
 
 MIT License
+

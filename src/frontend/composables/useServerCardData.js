@@ -4,6 +4,7 @@ import { getPublicAssetUrl } from '../utils/config'
 import { currentLang, useTranslation } from '../utils/i18n'
 import { LATENCY_WINDOW, PING } from '../utils/constants'
 import { formatBillingPrice } from '../utils/server.js'
+import { getCurrentProbeMetric } from '../utils/latencyWindow.js'
 
 export const DEFAULT_SERVER_CARD_CONFIG = {
   show_price: true,
@@ -45,6 +46,7 @@ const normalizeProbeMetricValue = (value) => {
 }
 
 const formatPercentValue = (value) => {
+  if (value === null || value === undefined || value === false) return '--'
   const number = Number(value)
   if (!Number.isFinite(number)) return '--'
   return `${Number.isInteger(number) ? number : number.toFixed(1)}%`
@@ -353,17 +355,6 @@ export function useServerCardData(props) {
     return value === false ? null : value
   }
 
-  const getAverageSeriesValue = (series, fallback) => {
-    const values = series
-      .map(point => normalizeProbeMetricValue(point.value))
-      .filter(value => typeof value === 'number' && Number.isFinite(value))
-    if (values.length > 0) {
-      return values.reduce((sum, value) => sum + value, 0) / values.length
-    }
-    const value = normalizeProbeMetricValue(fallback)
-    return value === false ? null : value
-  }
-
   const getLatencyWindowConfigPointCount = () => {
     const points = Number(props.sysConfig?.latency_window?.points)
     return Number.isInteger(points) && points > 0 ? points : DEFAULT_THREE_NET_POINT_COUNT
@@ -427,8 +418,8 @@ export function useServerCardData(props) {
     return {
       ...def,
       label,
-      latestPing: getLatestSeriesValue(pingSeries, props.server[def.pingField]),
-      averageLoss: getAverageSeriesValue(lossSeries, props.server[def.lossField]),
+      latestPing: getCurrentProbeMetric(props.server, def.pingField, getLatestSeriesValue(pingSeries, null)),
+      latestLoss: getCurrentProbeMetric(props.server, def.lossField, getLatestSeriesValue(lossSeries, null)),
       title: hasMeasuredPoint ? '' : `${label} ${trans.value.offline}`,
       points
     }
@@ -516,3 +507,4 @@ export function useServerCardData(props) {
     formatBytes
   }
 }
+

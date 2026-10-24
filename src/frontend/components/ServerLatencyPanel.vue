@@ -22,7 +22,7 @@
       <div class="three-net-column" aria-label="Loss">
         <div class="three-net-row" v-for="row in threeNetDetails" :key="'loss-' + row.key">
           <div class="three-net-head three-net-head-loss">
-            <strong class="three-net-value" :style="{ color: getLossColor(row.averageLoss) }">{{ formatLossValue(row.averageLoss) }}</strong>
+            <strong class="three-net-value" :style="{ color: getLossColor(row.latestLoss) }">{{ formatLossValue(row.latestLoss) }}</strong>
           </div>
           <div class="three-net-buckets">
             <span
@@ -107,3 +107,4 @@ defineProps({
   }
 })
 </script>
+
