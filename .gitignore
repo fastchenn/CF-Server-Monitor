@@ -40,3 +40,6 @@ Thumbs.db
 # Cloudflare Workers
 .wrangler/
 dist/
+
+# Generated, versioned live Agent binaries (build with npm run build:agent)
+/public/agent/bin/

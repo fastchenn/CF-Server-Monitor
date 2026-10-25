@@ -10,7 +10,7 @@
   <a href="README-en.md">English</a>
 </p>
 
-[![Workers](https://img.shields.io/badge/Workers-2.8.7%20Beta4-f38020?style=flat-square&logo=cloudflare&logoColor=white)](version.json)
+[![Workers](https://img.shields.io/badge/Workers-2.8.7--live.1-f38020?style=flat-square&logo=cloudflare&logoColor=white)](version.json)
 [![GitHub Stars](https://img.shields.io/github/stars/huilang-me/CF-Server-Monitor?style=flat-square&logo=github)](https://github.com/huilang-me/CF-Server-Monitor/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/huilang-me/CF-Server-Monitor?style=flat-square&logo=github)](https://github.com/huilang-me/CF-Server-Monitor/forks)
 [![License](https://img.shields.io/badge/License-MIT-16a34a?style=flat-square)](#许可证)
@@ -308,11 +308,17 @@ npm run build:github-page
 
 ### 延迟与丢包实时刷新
 
-本 Fork 的首页三网数值优先显示最新上报的延迟和丢包率，小条图随上报更新当前时间桶；缺失的丢包数据显示 `--`。详情页的实时视图也使用最新数值，延迟和丢包曲线独立按最短 3 秒间隔绘制新点。历史查询继续使用原有缓存，不新增高频 D1 轮询。
+本 Fork 现已包含配套的实时 Agent，源码见 [agent/source](agent/source)，构建与安装说明见 [agent/README.md](agent/README.md)。Linux amd64/arm64 的安装弹窗中，Agent 版本留空会安装本站 `v1.1.0-live.1`；明确填写上游版本号时继续使用上游安装器。
 
-如需几秒内收到上报，请在后台启用 Agent WSS 上报、配置有效开启时段，并将服务器连接模式设为 `auto`，WSS 上报间隔设为 2～3 秒。实际刷新取决于 Agent 是否连接成功；HTTP 模式仍受 HTTP 上报间隔限制。
+- 测量：每个目标独立按 1 秒节奏探测；慢节点和公网 IP 查询不会阻塞其他目标。单次探测超时仍可能延长该目标的采样间隔。
+- 延迟：显示最新完成的测量；最新超时立即显示 Timeout，不再使用两分钟中位数。
+- 丢包：最近 60 秒内失败次数 / 实际探测次数，保留小数。例如 60 次失败 1 次约为 1.67%；`0/60` 也是合法的实测结果。
+- 样本：前台显示失败/总数，提示中包含探测方式、统计窗口和测量年龄。没有样本、权限/DNS 错误或超过 15 秒没有新测量时显示未知，不伪装成 0%。
+- 传输：WSS 间隔建议 1～3 秒；服务器连接模式使用 auto、后台 WSS 开启时段需覆盖当前时段。历史查询和 D1 写入保持原有频率。
 
-注意：上游 Go Agent `v1.0.20` / `v1.1.0` 的网络探测固定为每 20 秒一次，延迟使用 2 分钟中位数、丢包使用最近 6 次结果。此面板修改会及时展示已收到的数据，但不能让原客户端生成更频繁的新测量；要实现每几秒重新测量，仍需更换修改过探测调度和统计窗口的 Agent。
+部署源码时先执行 `npm run build:agent`，再执行 `npm run build:frontend`。GitHub Actions 部署工作流已包含这一步。安装器检查 SHA-256，并关闭上游自动更新以防覆盖此实时版本。升级只需从后台重新复制安装命令执行，保留已有配置、服务路径和流量统计。
+
+已安装的上游 `v1.0.20` / `v1.1.0` 仍是每 20 秒测量、两分钟中位数、最近 6 次丢包统计；刷新网页或重装 Worker 不会升级服务器二进制，必须执行新的 Agent 安装命令。
 
 ### iOS Scriptable 小组件
 

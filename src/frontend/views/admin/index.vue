@@ -1939,7 +1939,9 @@ const getCustomInstallCommand = () => {
     `-url=${HOST}/update`,
     `-auto_update=${autoUpdateFlag}`
   )
-  const ghUrl = buildGhRawUrl(proxy, '/huilang-me/cfsm-agent/main/install.sh')
+  const useLiveAgent = targetOs.value === 'linux' && !version
+  const ghUrl = useLiveAgent ? `${HOST.replace(/\/$/, '')}/agent/install.sh` : buildGhRawUrl(proxy, '/huilang-me/cfsm-agent/main/install.sh')
+  if (useLiveAgent) params.push('-auto_update=0')
   const installCommand = `curl -fsSL ${quotePosixShellArg(ghUrl)} | sh -s -- ${params.join(' ')}`
   if (!isDedicatedUserInstall) return installCommand
 
@@ -1981,7 +1983,9 @@ const buildAutoDiscoveryCommand = ({ targetOs: os = 'linux', installMode: mode =
     `-auto_update=${autoUpdateFlag}`
   )
   if (serverName) params.push(`-name=${quotePosixShellArg(serverName)}`)
-  const ghUrl = buildGhRawUrl(proxy, '/huilang-me/cfsm-agent/main/install.sh')
+  const useLiveAgent = os === 'linux' && !agentVersion
+  const ghUrl = useLiveAgent ? `${HOST.replace(/\/$/, '')}/agent/install.sh` : buildGhRawUrl(proxy, '/huilang-me/cfsm-agent/main/install.sh')
+  if (useLiveAgent) params.push('-auto_update=0')
   const installCommand = `curl -fsSL ${quotePosixShellArg(ghUrl)} | sh -s -- ${params.join(' ')}`
   if (os !== 'linux' || mode !== 'cfsm-user') return installCommand
 

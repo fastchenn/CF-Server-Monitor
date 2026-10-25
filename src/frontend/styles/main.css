@@ -5279,3 +5279,5 @@ body.mikus-theme .mikus-stats-mascot-img {
         padding: 12px;
     }
 }
+
+.probe-sample-count { display: inline-block; margin-left: 4px; font-size: 10px; line-height: 1.2; color: var(--text-muted, #8b949e); font-weight: normal; white-space: nowrap; }

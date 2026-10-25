@@ -4,6 +4,19 @@ import { normalizeTimestamp } from './time.js'
 const PROBE_KEYS = ['ct', 'cu', 'cm', 'bd', 'node_1', 'node_2', 'node_3', 'node_4']
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key)
 
+export const getProbeSampleInfo = (server, key, now = Date.now()) => {
+  const meta = server?.probe_meta?.[key]
+  if (!meta || typeof meta !== 'object') return null
+  const sampledAt = Number(meta.sampled_at)
+  const samples = Number(meta.samples), lost = Number(meta.lost)
+  if (!Number.isInteger(samples) || samples < 0 || !Number.isInteger(lost) || lost < 0 || lost > samples) return null
+  const age = sampledAt > 0 ? Math.max(0, Math.floor((now - sampledAt) / 1000)) : null
+  const unavailable = !sampledAt || age > 15 || Boolean(meta.problem)
+  const summary = samples > 0 ? `${lost}/${samples}` : '--'
+  const tooltip = [String(meta.mode || '').toUpperCase(), `${meta.window_seconds}s`, summary, age === null ? '--' : `${age}s`, meta.problem].filter(Boolean).join(' · ')
+  return { samples, lost, age, unavailable, summary, tooltip }
+}
+
 export const getCurrentProbeMetric = (server, field, fallback = null) => {
   if (!server || !hasOwn(server, field) || server[field] === undefined) return fallback
   const value = server[field]

@@ -4,7 +4,7 @@ import { getPublicAssetUrl } from '../utils/config'
 import { currentLang, useTranslation } from '../utils/i18n'
 import { LATENCY_WINDOW, PING } from '../utils/constants'
 import { formatBillingPrice } from '../utils/server.js'
-import { getCurrentProbeMetric } from '../utils/latencyWindow.js'
+import { getCurrentProbeMetric, getProbeSampleInfo } from '../utils/latencyWindow.js'
 
 export const DEFAULT_SERVER_CARD_CONFIG = {
   show_price: true,
@@ -381,6 +381,7 @@ export function useServerCardData(props) {
   }
 
   const buildThreeNetRow = (def) => {
+    const sampleInfo = getProbeSampleInfo(props.server, def.key, currentTime.value)
     const customName = props.sysConfig?.[def.nameKey]
     const label = String(customName || trans.value[def.labelKey] || def.fallbackLabel)
     const pingSeries = getLatencySeries('ping', def.key)
@@ -418,8 +419,9 @@ export function useServerCardData(props) {
     return {
       ...def,
       label,
-      latestPing: getCurrentProbeMetric(props.server, def.pingField, getLatestSeriesValue(pingSeries, null)),
-      latestLoss: getCurrentProbeMetric(props.server, def.lossField, getLatestSeriesValue(lossSeries, null)),
+      latestPing: sampleInfo?.unavailable ? null : getCurrentProbeMetric(props.server, def.pingField, getLatestSeriesValue(pingSeries, null)),
+      latestLoss: sampleInfo?.unavailable ? null : getCurrentProbeMetric(props.server, def.lossField, getLatestSeriesValue(lossSeries, null)),
+      sampleInfo,
       title: hasMeasuredPoint ? '' : `${label} ${trans.value.offline}`,
       points
     }

@@ -137,6 +137,10 @@ export function coerceNumericMetricFields(payload) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(result, 'probe_meta')) {
+    result.probe_meta = normalizeProbeMetadata(result.probe_meta);
+  }
+
   if (Object.prototype.hasOwnProperty.call(result, 'disk')) {
     if (!hasDiskMetricsPayload(result)) {
       delete result.disk;
@@ -150,6 +154,25 @@ export function coerceNumericMetricFields(payload) {
 
 function normalizeProbeMetric(value) {
   return isDisabledProbeMetric(value) ? false : value;
+}
+
+export function normalizeProbeMetadata(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const result = {};
+  for (const key of ['ct', 'cu', 'cm', 'bd', 'node_1', 'node_2', 'node_3', 'node_4']) {
+    const item = value[key];
+    if (!item || typeof item !== 'object') continue;
+    const samples = Number(item.samples), lost = Number(item.lost);
+    const sampledAt = Number(item.sampled_at), windowSeconds = Number(item.window_seconds);
+    if (!Number.isInteger(samples) || samples < 0 || samples > 10000 ||
+        !Number.isInteger(lost) || lost < 0 || lost > samples ||
+        !Number.isFinite(sampledAt) || sampledAt < 0 ||
+        !Number.isInteger(windowSeconds) || windowSeconds < 1 || windowSeconds > 600 ||
+        !['tcp', 'icmp'].includes(item.mode)) continue;
+    result[key] = { sampled_at: sampledAt, samples, lost, window_seconds: windowSeconds, mode: item.mode };
+    if (typeof item.problem === 'string' && item.problem) result[key].problem = item.problem.slice(0, 80);
+  }
+  return result;
 }
 
 export function normalizeProbeMetricRow(metrics) {
@@ -194,6 +217,8 @@ export function mergeMetricsIntoServer(server, metrics) {
   server.loss_node_2 = normalizeProbeMetric(metrics.loss_node_2);
   server.loss_node_3 = normalizeProbeMetric(metrics.loss_node_3);
   server.loss_node_4 = normalizeProbeMetric(metrics.loss_node_4);
+  const probeMeta = normalizeProbeMetadata(metrics.probe_meta);
+  if (probeMeta) server.probe_meta = probeMeta;
   server.ram_total = metrics.ram_total || 0;
   server.ram_used = metrics.ram_used || 0;
   server.swap_total = metrics.swap_total || 0;

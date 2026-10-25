@@ -5,7 +5,7 @@
         <div class="three-net-row" v-for="row in threeNetDetails" :key="'ping-' + row.key">
           <div class="three-net-head">
             <span class="three-net-name">{{ row.label }}</span>
-            <strong class="three-net-value" :style="{ color: getPingColor(row.latestPing) }">{{ formatPingValue(row.latestPing) }}</strong>
+            <strong class="three-net-value" :title="row.sampleInfo?.tooltip" :style="{ color: getPingColor(row.latestPing) }">{{ row.sampleInfo?.unavailable ? '--' : formatPingValue(row.latestPing) }}</strong>
           </div>
           <div class="three-net-buckets">
             <span
@@ -22,7 +22,8 @@
       <div class="three-net-column" aria-label="Loss">
         <div class="three-net-row" v-for="row in threeNetDetails" :key="'loss-' + row.key">
           <div class="three-net-head three-net-head-loss">
-            <strong class="three-net-value" :style="{ color: getLossColor(row.latestLoss) }">{{ formatLossValue(row.latestLoss) }}</strong>
+            <strong class="three-net-value" :title="row.sampleInfo?.tooltip" :style="{ color: getLossColor(row.latestLoss) }">{{ formatLossValue(row.latestLoss) }}</strong>
+            <small v-if="row.sampleInfo" class="probe-sample-count" :title="row.sampleInfo.tooltip">{{ row.sampleInfo.summary }}</small>
           </div>
           <div class="three-net-buckets">
             <span

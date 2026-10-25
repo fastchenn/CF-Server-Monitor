@@ -557,7 +557,7 @@ export async function saveMetricsHistory(db, serverId, historyPartitionId, metri
 
   const parseLoss = (val) => {
     if (isDisabledProbeMetric(val)) return DISABLED_PROBE_VALUE;
-    const num = parseInt(val);
+    const num = parseFloat(val);
     if (Number.isNaN(num)) return null;
     return Math.max(0, Math.min(100, num));
   };

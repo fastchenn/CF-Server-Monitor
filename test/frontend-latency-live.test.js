@@ -53,6 +53,20 @@ test('server cards display live probe updates instead of cached history', async 
 
     props.server.loss = []
     assert.equal(card.formatLossValue(ct().latestLoss), '--', 'missing loss must not be shown as 0%')
+
+    props.server.ping_ct = 200
+    props.server.loss_ct = 1.67
+    props.server.current_timestamp = baseTs + 2000
+    props.server.probe_meta = { ct: { sampled_at: baseTs, samples: 60, lost: 1, window_seconds: 60, mode: 'icmp' } }
+    assert.equal(ct().latestLoss, 1.67)
+    assert.equal(ct().sampleInfo.summary, '1/60')
+    props.server.current_timestamp = baseTs + 20_000
+    assert.equal(ct().latestPing, null, 'repeated reports cannot disguise an expired probe')
+    assert.equal(ct().latestLoss, null)
+    props.server.probe_meta.ct.sampled_at = baseTs + 20_000
+    assert.equal(ct().latestPing, 200)
+    assert.equal(ct().latestLoss, 1.67)
+
   } finally {
     globalThis.localStorage = originalStorage
     await vite.close()

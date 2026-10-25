@@ -10,7 +10,7 @@ A lightweight multi-server monitoring dashboard built on Cloudflare Workers, D1,
   <a href="README-en.md">English</a>
 </p>
 
-[![Workers](https://img.shields.io/badge/Workers-2.8.7%20Beta4-f38020?style=flat-square&logo=cloudflare&logoColor=white)](version.json)
+[![Workers](https://img.shields.io/badge/Workers-2.8.7--live.1-f38020?style=flat-square&logo=cloudflare&logoColor=white)](version.json)
 [![GitHub Stars](https://img.shields.io/github/stars/huilang-me/CF-Server-Monitor?style=flat-square&logo=github)](https://github.com/huilang-me/CF-Server-Monitor/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/huilang-me/CF-Server-Monitor?style=flat-square&logo=github)](https://github.com/huilang-me/CF-Server-Monitor/forks)
 [![License](https://img.shields.io/badge/License-MIT-16a34a?style=flat-square)](#license)
@@ -742,3 +742,7 @@ If you need airport transfers, business transportation, or private chauffeur ser
 ## License
 
 MIT License
+
+## Live Agent in this fork
+
+This fork includes a one-second network probe client for Linux amd64/arm64. Leave the Agent version empty in the Linux install dialog to use it. Reinstalling the Worker alone does not replace an already installed upstream client. See [agent/README.md](agent/README.md) for behavior, SHA-256-verified installation, sample counts and build/deploy steps.

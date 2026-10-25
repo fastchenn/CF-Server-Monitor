@@ -93,8 +93,8 @@
         <div class="config-row">
           <span class="config-label">{{ trans.autoUpdate }}</span>
           <span class="config-value">
-            <span :class="['config-badge', autoUpdate ? 'is-enabled' : 'is-disabled']">
-              {{ autoUpdate ? trans.enabled : trans.disabled }}
+            <span :class="['config-badge', effectiveAutoUpdate ? 'is-enabled' : 'is-disabled']">
+              {{ effectiveAutoUpdate ? trans.enabled : trans.disabled }}
             </span>
           </span>
         </div>
@@ -224,6 +224,8 @@ const selectedGhProxy = computed({
 })
 
 const showCustomGhProxy = computed(() => selectedGhProxy.value === CUSTOM_GH_PROXY_VALUE)
+const effectiveAutoUpdate = computed(() => props.targetOs === 'linux' && !props.installVersion.trim() ? false : props.autoUpdate)
+
 const effectivePingMode = computed(() => (
   props.targetOs === 'linux' && props.installMode === 'cfsm-user'
     ? 'tcp'

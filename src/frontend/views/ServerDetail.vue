@@ -335,7 +335,7 @@
           <div class="chart-header-actions">
             <div class="ping-indicator">
               <span v-for="item in visiblePingStats" :key="item.field" :class="item.className">
-                {{ item.label }} <b>{{ item.value !== null ? item.value + 'ms' : 'Timeout' }}</b>
+                {{ item.label }} <b :title="item.sampleInfo?.tooltip">{{ item.sampleInfo?.unavailable ? '--' : (item.value !== null ? item.value + 'ms' : 'Timeout') }}</b>
               </span>
             </div>
             <ChartExpandButton :expanded="isChartExpanded('ping')" @toggle="toggleChartExpanded('ping')" />
@@ -355,7 +355,7 @@
           <div class="chart-header-actions">
             <div class="ping-indicator">
               <span v-for="item in visibleLossStats" :key="item.field" :class="item.className">
-                {{ item.label }} <b>{{ item.value }}%</b>
+                {{ item.label }} <b :title="item.sampleInfo?.tooltip">{{ item.sampleInfo?.unavailable ? '--' : item.value + '%' }}</b><small v-if="item.sampleInfo" class="probe-sample-count">{{ item.sampleInfo.summary }}</small>
               </span>
             </div>
             <ChartExpandButton :expanded="isChartExpanded('loss')" @toggle="toggleChartExpanded('loss')" />
@@ -413,7 +413,7 @@ import { formatDateTime, normalizeTimestamp as normalizeMetricTimestamp } from '
 import useTheme from '../composables/useTheme'
 import { isDisabledProbeMetric } from '../utils/server.js'
 import { resolvePlaybackCursor } from '../utils/playback.js'
-import { getCurrentProbeMetric } from '../utils/latencyWindow.js'
+import { getCurrentProbeMetric, getProbeSampleInfo } from '../utils/latencyWindow.js'
 import { applyMikusThemeOptions } from '../utils/themeOptions.js'
 
 const route = useRoute()
@@ -442,6 +442,8 @@ const LATEST_REPORT_MAX_REPLAY_DELAY = 120000
 const REPORT_CHART_UPDATE_INTERVAL_MS = 30000
 const PROBE_CHART_UPDATE_INTERVAL_MS = 3000
 const currentHours = ref(REALTIME_HISTORY_HOURS)
+const probeNow = ref(Date.now())
+let probeAgeTimer = null
 const lastUpdateText = ref('')
 const config = ref(null)
 const showLoginModal = ref(false)
@@ -780,6 +782,7 @@ const hasPingData = computed(() => visiblePingFields.value.length > 0)
 const visiblePingStats = computed(() => visiblePingFields.value.map(item => ({
   ...item,
   label: pingLabel(item.field.replace('ping_', '')),
+  sampleInfo: isRealtimeHistoryRange() ? getProbeSampleInfo(server.value, item.field.replace('ping_', ''), probeNow.value) : null,
   value: isRealtimeHistoryRange()
     ? getCurrentProbeMetric(server.value, item.field, avgPingRefs[item.field].value)
     : avgPingRefs[item.field].value
@@ -793,6 +796,7 @@ const visibleLossStats = computed(() => visibleLossFields.value.map(item => ({
   ...item,
   field: item.lossField,
   label: pingLabel(item.field.replace('ping_', '')),
+  sampleInfo: isRealtimeHistoryRange() ? getProbeSampleInfo(server.value, item.field.replace('ping_', ''), probeNow.value) : null,
   value: isRealtimeHistoryRange()
     ? getCurrentProbeMetric(server.value, item.lossField, avgLossRefs[item.lossField].value)
     : avgLossRefs[item.lossField].value
@@ -818,7 +822,7 @@ const parseLoadAvg = (loadAvgStr) => {
 }
 
 const isLossValid = (value) => !isDisabledProbeMetric(value) && value !== null && value !== undefined && value !== '' && !Number.isNaN(parseFloat(value))
-const formatLoss = (value) => isLossValid(value) ? `${Math.max(0, Math.min(100, parseFloat(value))).toFixed(0)}%` : ''
+const formatLoss = (value) => isLossValid(value) ? `${Number(Math.max(0, Math.min(100, parseFloat(value))).toFixed(2)).toString()}%` : ''
 const hasLossData = computed(() => visibleLossFields.value.length > 0)
 const formatPing = (value) => (value === null || value === undefined || value === '' || value === 'null') ? 'Timeout' : `${value}ms`
 
@@ -1943,10 +1947,12 @@ watch([cpuChartRef, gpuChartRef, gpuMemChartRef, gpuClockChartRef, gpuPowerChart
 })
 
 onMounted(() => {
+  probeAgeTimer = setInterval(() => { probeNow.value = Date.now() }, 1000)
   init()
 })
 
 onUnmounted(() => {
+  clearInterval(probeAgeTimer)
   document.removeEventListener('visibilitychange', handleVisibility)
   if (liveSocket) liveSocket.close()
   clearLatestReportReplayTimers()
