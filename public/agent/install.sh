@@ -243,7 +243,7 @@ log "  url     : $url"
 
 download "$url" "$tmp"
 download "$checksum_url" "$checksum_file"
-expected="$(awk -v asset="$asset" '$2 == asset { print $1; exit }' "$checksum_file")"
+expected="$(awk -v asset="$asset" '$2 == asset || $2 == "*" asset { print $1; exit }' "$checksum_file")"
 [ "${#expected}" -eq 64 ] || die "缺少对应架构的 SHA-256 校验值"
 if command -v sha256sum >/dev/null 2>&1; then
     actual="$(sha256sum "$tmp" | awk '{print $1}')"
