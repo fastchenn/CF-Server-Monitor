@@ -81,7 +81,8 @@
             <input
               id="cfg_auto_discovery_auto_update"
               type="checkbox"
-              :checked="autoUpdate"
+              :checked="autoUpdate && !usesLiveAgent(targetOs, version)"
+              :disabled="usesLiveAgent(targetOs, version)"
               @change="$emit('update:auto-update', $event.target.checked)"
             >
             <label for="cfg_auto_discovery_auto_update"><b>{{ trans.autoUpdate }}</b></label>
@@ -108,6 +109,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import HelpTooltip from '../../../components/HelpTooltip.vue'
+import { usesLiveAgent } from '../../../utils/agentInstall.js'
 
 const props = defineProps({
   trans: { type: Object, required: true },

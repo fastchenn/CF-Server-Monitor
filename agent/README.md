@@ -10,7 +10,7 @@ Changes:
 - Reports include the measurement timestamp, failed/total counts, mode, and window. No samples or permission/DNS errors produce unknown values, rather than a fabricated 0%.
 - Buffered metric samples include their own probe values and metadata.
 
-The bootstrap installer is served at `/agent/install.sh`. Empty Agent version + Linux in the admin copy-command dialog selects this build. Explicit upstream versions and other operating systems continue to use the upstream installer. Current live binaries support Linux amd64 and arm64.
+The bootstrap installer is served at `/agent/install.sh`. Linux install and auto-discovery dialogs default to `v1.1.0-live.4-instant`, the same source as the verified PandaUS agent. Clearing the version also selects this build. Explicit upstream versions and other operating systems continue to use the upstream installer. Current live binaries support Linux amd64 and arm64.
 
 Build before building the frontend:
 
@@ -23,6 +23,6 @@ Go must meet `source/go.mod`. `CFSM_GO` can select a Go executable. Generated bi
 
 The live installer sets `auto_update=0` to prevent upstream auto-update from replacing this fork with the old probing implementation. Re-run the site's copy command to install a new live version. Installation preserves the existing service/config paths and traffic totals using the upstream install implementation.
 
-ICMP requires the relevant raw-socket permission (root with this installer). ICMP rate limiting, a closed TCP port, and DNS or permission failures must be distinguished from real path packet loss. A measured `0/60` is a valid result; this build does not invent failures.
+On Linux, ICMP first uses unprivileged ping sockets, then falls back to raw sockets if permission is denied. This supports containers without CAP_NET_RAW when their ping group range permits the service user. The build includes the realtime probe timestamps and last-60-packet counts required by the dashboard. ICMP rate limiting, a closed TCP port, and DNS or permission failures should be considered when interpreting measured loss.
 
 See `source/LICENSE` for the original license.

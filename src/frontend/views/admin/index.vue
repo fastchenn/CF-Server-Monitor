@@ -614,6 +614,7 @@ import AutoDiscoveryCommandModal from './components/AutoDiscoveryCommandModal.vu
 import { adminApi, login, logout as apiLogout, upgradeDatabase, clearHistory, fetchConfig } from '../../utils/api'
 import { hasMultipleApiBases, getApiBases } from '../../utils/config.js'
 import { copyTextToClipboard } from '../../utils/clipboard.js'
+import { getDefaultAgentVersion, usesLiveAgent } from '../../utils/agentInstall.js'
 import { normalizeLanguagePreference, normalizeNotificationLanguagePreference, t, useTranslation } from '../../utils/i18n'
 import { PING_NODE_FIELDS, validatePingNode } from '../../utils/pingNode.js'
 import { normalizeDisplayMode, resolveDisplayMode } from '../../utils/displayMode.js'
@@ -1143,7 +1144,7 @@ const currentServerName = ref('')
 const targetOs = ref('linux')
 const installMode = ref('current-user')
 const installGhProxy = ref('')
-const installVersion = ref('')
+const installVersion = ref(getDefaultAgentVersion('linux'))
 const collectInterval = ref(0)
 const reportInterval = ref(60)
 const wssReportInterval = ref(2)
@@ -1168,10 +1169,18 @@ const showAutoDiscoveryModal = ref(false)
 const autoDiscoveryTargetOs = ref('linux')
 const autoDiscoveryInstallMode = ref('current-user')
 const autoDiscoveryName = ref('')
-const autoDiscoveryVersion = ref('')
+const autoDiscoveryVersion = ref(getDefaultAgentVersion('linux'))
 const autoDiscoveryAutoUpdate = ref(false)
 const autoDiscoveryGhProxy = ref('')
 const autoDiscoveryCopied = ref(false)
+
+for (const [os, version] of [[targetOs, installVersion], [autoDiscoveryTargetOs, autoDiscoveryVersion]]) {
+  watch(os, (next, previous) => {
+    if (version.value === getDefaultAgentVersion(previous)) {
+      version.value = getDefaultAgentVersion(next)
+    }
+  })
+}
 
 const isWssReportEnabled = computed(() => settings.value.wss_report_enabled === true)
 const getEffectiveConnectionMode = (value) => {
@@ -1791,7 +1800,7 @@ const copyCmd = (serverId) => {
   targetOs.value = 'linux'
   installMode.value = 'current-user'
   installGhProxy.value = ''
-  installVersion.value = ''
+  installVersion.value = getDefaultAgentVersion('linux')
   collectInterval.value = server?.collect_interval ?? 0
   reportInterval.value = server?.report_interval || 60
   wssReportInterval.value = server?.wss_report_interval || 2
@@ -1939,7 +1948,7 @@ const getCustomInstallCommand = () => {
     `-url=${HOST}/update`,
     `-auto_update=${autoUpdateFlag}`
   )
-  const useLiveAgent = targetOs.value === 'linux' && !version
+  const useLiveAgent = usesLiveAgent(targetOs.value, version)
   const ghUrl = useLiveAgent ? `${HOST.replace(/\/$/, '')}/agent/install.sh` : buildGhRawUrl(proxy, '/huilang-me/cfsm-agent/main/install.sh')
   if (useLiveAgent) params.push('-auto_update=0')
   const installCommand = `curl -fsSL ${quotePosixShellArg(ghUrl)} | sh -s -- ${params.join(' ')}`
@@ -1983,7 +1992,7 @@ const buildAutoDiscoveryCommand = ({ targetOs: os = 'linux', installMode: mode =
     `-auto_update=${autoUpdateFlag}`
   )
   if (serverName) params.push(`-name=${quotePosixShellArg(serverName)}`)
-  const useLiveAgent = os === 'linux' && !agentVersion
+  const useLiveAgent = usesLiveAgent(os, agentVersion)
   const ghUrl = useLiveAgent ? `${HOST.replace(/\/$/, '')}/agent/install.sh` : buildGhRawUrl(proxy, '/huilang-me/cfsm-agent/main/install.sh')
   if (useLiveAgent) params.push('-auto_update=0')
   const installCommand = `curl -fsSL ${quotePosixShellArg(ghUrl)} | sh -s -- ${params.join(' ')}`

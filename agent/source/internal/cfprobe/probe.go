@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	ping "github.com/prometheus-community/pro-bing"
@@ -209,13 +211,23 @@ func icmpPing(target string, timeout time.Duration) (int, error) {
 		return -1, err
 	}
 
+	if runtime.GOOS == "linux" {
+		ms, err := icmpPingWithPrivilege(ip, timeout, false)
+		if err == nil || (!os.IsPermission(err) && !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.EACCES)) {
+			return ms, err
+		}
+	}
+	return icmpPingWithPrivilege(ip, timeout, true)
+}
+
+func icmpPingWithPrivilege(ip string, timeout time.Duration, privileged bool) (int, error) {
 	pinger, err := ping.NewPinger(ip)
 	if err != nil {
 		return -1, err
 	}
 	pinger.Count = 1
 	pinger.Timeout = timeout
-	pinger.SetPrivileged(true)
+	pinger.SetPrivileged(privileged)
 	if err := pinger.Run(); err != nil {
 		return -1, err
 	}
@@ -258,13 +270,6 @@ func measureProbe(kind, target string, count, defaultPort int, log logger) Probe
 			values = append(values, ms)
 		} else {
 			log.debugf("probe %s failed target=%s err=%v", kind, target, err)
-			var dnsError *net.DNSError
-			if errors.Is(err, os.ErrPermission) || strings.Contains(strings.ToLower(err.Error()), "operation not permitted") {
-				return ProbeResult{RTTMs: -1, Loss: -1, Unavailable: true, Problem: "ICMP permission denied"}
-			}
-			if errors.As(err, &dnsError) {
-				return ProbeResult{RTTMs: -1, Loss: -1, Unavailable: true, Problem: "DNS lookup failed"}
-			}
 		}
 	}
 	return buildProbeResult(count, values[:ok])
@@ -287,9 +292,9 @@ func buildProbeResult(count int, values []int) ProbeResult {
 	}
 	ok := len(values)
 	if ok == 0 {
-		return ProbeResult{RTTMs: -1, Loss: 100, OK: false, Samples: count, Lost: count}
+		return ProbeResult{RTTMs: -1, Loss: 100, OK: false}
 	}
-	return ProbeResult{RTTMs: medianInt(values), Loss: float64(count-ok) * 100 / float64(count), OK: true, Samples: count, Lost: count - ok}
+	return ProbeResult{RTTMs: medianInt(values), Loss: (count - ok) * 100 / count, OK: true}
 }
 
 func medianInt(values []int) int {

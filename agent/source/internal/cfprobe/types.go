@@ -76,26 +76,13 @@ type InstallOptions struct {
 }
 
 type ProbeResult struct {
-	RTTMs       int
-	Loss        float64
-	OK          bool
-	Samples     int
-	Lost        int
-	SampledAt   int64
-	Unavailable bool
-	Problem     string
-}
-
-type ProbeMetadata struct {
-	SampledAt     int64  `json:"sampled_at"`
-	Samples       int    `json:"samples"`
-	Lost          int    `json:"lost"`
-	WindowSeconds int    `json:"window_seconds"`
-	Mode          string `json:"mode"`
-	Problem       string `json:"problem,omitempty"`
+	RTTMs int
+	Loss  int
+	OK    bool
 }
 
 type ProbeSnapshot struct {
+	Meta  map[string]any
 	IPv4  string
 	IPv6  string
 	CT    ProbeResult
@@ -109,6 +96,7 @@ type ProbeSnapshot struct {
 }
 
 type Metrics struct {
+	ProbeMeta    map[string]any
 	CPU          string
 	RAMTotal     string
 	RAMUsed      string
@@ -152,7 +140,6 @@ type Metrics struct {
 	LossNode2    any
 	LossNode3    any
 	LossNode4    any
-	ProbeMeta    map[string]ProbeMetadata
 }
 
 type BasicStats struct {

@@ -215,7 +215,8 @@ func parseNvidiaFloat(raw string) any {
 }
 
 func metricsToMap(m Metrics) map[string]any {
-	result := map[string]any{
+	return map[string]any{
+		"probe_meta":     m.ProbeMeta,
 		"cpu":            m.CPU,
 		"ram_total":      m.RAMTotal,
 		"ram_used":       m.RAMUsed,
@@ -260,10 +261,6 @@ func metricsToMap(m Metrics) map[string]any {
 		"loss_node_3":    m.LossNode3,
 		"loss_node_4":    m.LossNode4,
 	}
-	if len(m.ProbeMeta) > 0 {
-		result["probe_meta"] = m.ProbeMeta
-	}
-	return result
 }
 
 func diskIOStatsFromCounters(prev, current DiskIOCounters, elapsedSeconds float64) DiskIOStats {
@@ -329,15 +326,20 @@ func clampMetric(v, minValue, maxValue float64) float64 {
 }
 
 func sampleMetricsToMap(m Metrics) map[string]any {
-	full := metricsToMap(m)
-	fields := []string{"cpu", "ram_total", "ram_used", "swap_total", "swap_used", "net_in_speed", "net_out_speed", "ping_ct", "ping_cu", "ping_cm", "ping_bd", "ping_node_1", "ping_node_2", "ping_node_3", "ping_node_4", "loss_ct", "loss_cu", "loss_cm", "loss_bd", "loss_node_1", "loss_node_2", "loss_node_3", "loss_node_4", "probe_meta"}
-	result := make(map[string]any)
-	for _, field := range fields {
-		if value, ok := full[field]; ok {
-			result[field] = value
-		}
+	return map[string]any{
+		"probe_meta": m.ProbeMeta,
+		"ping_ct":    m.PingCT, "ping_cu": m.PingCU, "ping_cm": m.PingCM, "ping_bd": m.PingBD,
+		"ping_node_1": m.PingNode1, "ping_node_2": m.PingNode2, "ping_node_3": m.PingNode3, "ping_node_4": m.PingNode4,
+		"loss_ct": m.LossCT, "loss_cu": m.LossCU, "loss_cm": m.LossCM, "loss_bd": m.LossBD,
+		"loss_node_1": m.LossNode1, "loss_node_2": m.LossNode2, "loss_node_3": m.LossNode3, "loss_node_4": m.LossNode4,
+		"cpu":           m.CPU,
+		"ram_total":     m.RAMTotal,
+		"ram_used":      m.RAMUsed,
+		"swap_total":    m.SwapTotal,
+		"swap_used":     m.SwapUsed,
+		"net_in_speed":  m.NetInSpeed,
+		"net_out_speed": m.NetOutSpeed,
 	}
-	return result
 }
 
 func toJSONSize(v any) int {

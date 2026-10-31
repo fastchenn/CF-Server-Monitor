@@ -2,7 +2,7 @@
 set -eu
 
 REPO="fastchenn/CF-Server-Monitor (live agent)"
-LIVE_VERSION="v1.1.0-live.1"
+LIVE_VERSION="v1.1.0-live.4-instant"
 BASE_URL="${CFSM_AGENT_BASE_URL:-https://tz.239080.xyz/agent}"
 GITHUB_PROXY=""
 INSTALL_VERSION="latest"

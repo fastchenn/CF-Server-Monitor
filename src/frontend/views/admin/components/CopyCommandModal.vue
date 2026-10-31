@@ -151,6 +151,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import HelpTooltip from '../../../components/HelpTooltip.vue'
+import { usesLiveAgent } from '../../../utils/agentInstall.js'
 
 const props = defineProps({
   trans: { type: Object, required: true },
@@ -224,7 +225,7 @@ const selectedGhProxy = computed({
 })
 
 const showCustomGhProxy = computed(() => selectedGhProxy.value === CUSTOM_GH_PROXY_VALUE)
-const effectiveAutoUpdate = computed(() => props.targetOs === 'linux' && !props.installVersion.trim() ? false : props.autoUpdate)
+const effectiveAutoUpdate = computed(() => usesLiveAgent(props.targetOs, props.installVersion) ? false : props.autoUpdate)
 
 const effectivePingMode = computed(() => (
   props.targetOs === 'linux' && props.installMode === 'cfsm-user'

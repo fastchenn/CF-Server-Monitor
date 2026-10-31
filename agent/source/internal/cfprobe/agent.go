@@ -85,7 +85,7 @@ const (
 	agentWSSModeDisabled          = "disabled"
 	agentWSSScheduleDisabled      = "wss_disabled"
 	metricsProbeInterval          = time.Second
-	metricsProbeWindow            = time.Minute
+	metricsProbeMedianWindow      = 2 * time.Minute
 	metricsProbeWindowSampleCount = 60
 	metricsProbeSampleCount       = 1
 	configStateReportInterval     = time.Minute
@@ -171,36 +171,46 @@ func (h *rollingProbeHistory) add(now time.Time, target string, result ProbeResu
 }
 
 func (h rollingProbeHistory) snapshot(now time.Time) ProbeResult {
-	cutoff := now.Add(-metricsProbeWindow)
-	var latest *timedProbeResult
-	total, lost := 0, 0
-	for i := range h.samples {
-		sample := &h.samples[i]
-		if !sample.at.After(cutoff) || sample.at.After(now) {
+	if len(h.samples) == 0 {
+		return ProbeResult{}
+	}
+
+	cutoff := now.Add(-metricsProbeMedianWindow)
+	values := make([]int, 0, len(h.samples))
+	for _, sample := range h.samples {
+		if sample.at.Before(cutoff) || !sample.result.OK || sample.result.RTTMs < 0 {
 			continue
 		}
-		latest = sample
-		if sample.result.Unavailable {
-			continue
-		}
-		total++
+		values = append(values, sample.result.RTTMs)
+	}
+
+	lossSamples := h.samples
+	if len(lossSamples) > metricsProbeWindowSampleCount {
+		lossSamples = lossSamples[len(lossSamples)-metricsProbeWindowSampleCount:]
+	}
+	lost := 0
+	for _, sample := range lossSamples {
 		if !sample.result.OK {
 			lost++
 		}
 	}
-	if latest == nil {
-		return ProbeResult{RTTMs: -1, Loss: -1, Unavailable: true}
+	loss := lost * 100 / len(lossSamples)
+
+	if len(values) == 0 {
+		return ProbeResult{RTTMs: -1, Loss: loss, OK: false}
 	}
-	result := latest.result
-	result.SampledAt = latest.at.UnixMilli()
-	result.Samples, result.Lost = total, lost
-	if result.Unavailable || total == 0 {
-		result.RTTMs, result.Loss, result.OK = -1, -1, false
+	return ProbeResult{RTTMs: medianInt(values), Loss: loss, OK: true}
+}
+
+// Show the current measurement immediately; keep only loss as a rolling value.
+func (h rollingProbeHistory) latestSnapshot(now time.Time) ProbeResult {
+	result := h.snapshot(now)
+	if len(h.samples) == 0 {
 		return result
 	}
-	// Latency is the latest completed probe, including an immediate timeout.
-	// Loss is a count over actual attempts in the rolling time window.
-	result.Loss = float64(lost) * 100 / float64(total)
+	latest := h.samples[len(h.samples)-1].result
+	result.RTTMs = latest.RTTMs
+	result.OK = latest.OK
 	return result
 }
 
@@ -815,6 +825,7 @@ func (a *Agent) buildMetrics(cfg Config, cpu string, netNow NetBytes, rxSpeed, t
 	a.mu.RUnlock()
 	b := a.basic
 	return Metrics{
+		ProbeMeta:    probes.Meta,
 		CPU:          cpu,
 		RAMTotal:     uintString(b.MemTotalMB),
 		RAMUsed:      uintString(b.MemUsedMB),
@@ -850,15 +861,14 @@ func (a *Agent) buildMetrics(cfg Config, cpu string, netNow NetBytes, rxSpeed, t
 		PingNode2:    probeRTTValue(cfg.Node2, probes.Node2),
 		PingNode3:    probeRTTValue(cfg.Node3, probes.Node3),
 		PingNode4:    probeRTTValue(cfg.Node4, probes.Node4),
-		ProbeMeta:    a.buildProbeMetadata(cfg, probes),
-		LossCT:       probeLossValue(cfg.CTNode, probes.CT),
-		LossCU:       probeLossValue(cfg.CUNode, probes.CU),
-		LossCM:       probeLossValue(cfg.CMNode, probes.CM),
-		LossBD:       probeLossValue(cfg.BDNode, probes.BD),
-		LossNode1:    probeLossValue(cfg.Node1, probes.Node1),
-		LossNode2:    probeLossValue(cfg.Node2, probes.Node2),
-		LossNode3:    probeLossValue(cfg.Node3, probes.Node3),
-		LossNode4:    probeLossValue(cfg.Node4, probes.Node4),
+		LossCT:       probeLossValue(cfg.CTNode, probes.CT, probes.Meta["ct"]),
+		LossCU:       probeLossValue(cfg.CUNode, probes.CU, probes.Meta["cu"]),
+		LossCM:       probeLossValue(cfg.CMNode, probes.CM, probes.Meta["cm"]),
+		LossBD:       probeLossValue(cfg.BDNode, probes.BD, probes.Meta["bd"]),
+		LossNode1:    probeLossValue(cfg.Node1, probes.Node1, probes.Meta["node_1"]),
+		LossNode2:    probeLossValue(cfg.Node2, probes.Node2, probes.Meta["node_2"]),
+		LossNode3:    probeLossValue(cfg.Node3, probes.Node3, probes.Meta["node_3"]),
+		LossNode4:    probeLossValue(cfg.Node4, probes.Node4, probes.Meta["node_4"]),
 	}
 }
 
@@ -872,14 +882,23 @@ func probeRTTValue(node string, r ProbeResult) any {
 	return strconv.Itoa(r.RTTMs)
 }
 
-func probeLossValue(node string, r ProbeResult) any {
+func probeLossValue(node string, r ProbeResult, metadata ...any) any {
 	if strings.TrimSpace(node) == "" {
 		return false
 	}
-	if r.SampledAt == 0 || r.Unavailable || r.Loss < 0 {
-		return "null"
+	if len(metadata) > 0 {
+		if meta, ok := metadata[0].(map[string]any); ok {
+			samples, samplesOK := meta["samples"].(int)
+			lost, lostOK := meta["lost"].(int)
+			if samplesOK && lostOK && samples > 0 && lost >= 0 && lost <= samples {
+				return strconv.FormatFloat(100*float64(lost)/float64(samples), 'f', 1, 64)
+			}
+		}
 	}
-	return strconv.FormatFloat(r.Loss, 'f', 2, 64)
+	if r.Loss < 0 {
+		return "100"
+	}
+	return strconv.Itoa(r.Loss)
 }
 
 func (a *Agent) report(m Metrics) {
@@ -1117,68 +1136,8 @@ func valueOrZero[T ~int64 | ~uint64](value *T) T {
 
 func (a *Agent) networkWorker(ctx context.Context) {
 	go a.publicIPWorker(ctx)
-	measure := func(kind, target string) ProbeResult {
-		return measureProbe(kind, target, metricsProbeSampleCount, defaultMetricsTCPPort, a.log)
-	}
-	var workers sync.WaitGroup
-	for index := 0; index < 8; index++ {
-		workers.Add(1)
-		go func(index int) {
-			defer workers.Done()
-			a.runProbeWorker(ctx, index, measure)
-		}(index)
-	}
-	workers.Wait()
-}
-
-func probeTargets(cfg Config) []string {
-	return []string{cfg.CTNode, cfg.CUNode, cfg.CMNode, cfg.BDNode, cfg.Node1, cfg.Node2, cfg.Node3, cfg.Node4}
-}
-
-func (a *Agent) runProbeWorker(ctx context.Context, index int, measure func(string, string) ProbeResult) {
-	history := rollingProbeHistory{}
-	ticker := time.NewTicker(metricsProbeInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		cfg := a.configSnapshot()
-		target := probeTargets(cfg)[index]
-		result := ProbeResult{}
-		if target != "" {
-			result = measure(cfg.PingMode, target)
-		}
-		now := time.Now()
-		history.add(now, probeHistoryKey(cfg.PingMode, target), result)
-		snapshot := history.snapshot(now)
-		a.mu.Lock()
-		switch index {
-		case 0:
-			a.probes.CT = snapshot
-		case 1:
-			a.probes.CU = snapshot
-		case 2:
-			a.probes.CM = snapshot
-		case 3:
-			a.probes.BD = snapshot
-		case 4:
-			a.probes.Node1 = snapshot
-		case 5:
-			a.probes.Node2 = snapshot
-		case 6:
-			a.probes.Node3 = snapshot
-		case 7:
-			a.probes.Node4 = snapshot
-		}
-		a.mu.Unlock()
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
+	for _, key := range []string{"ct", "cu", "cm", "bd", "node_1", "node_2", "node_3", "node_4"} {
+		go a.runProbeWorker(ctx, key)
 	}
 }
 
@@ -1186,15 +1145,9 @@ func (a *Agent) publicIPWorker(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
 		cfg := a.configSnapshot()
-		usePublicDNS := usePublicDNSResolver(cfg)
-		ipv4 := lookupPublicIP("tcp4", a.log, usePublicDNS)
-		ipv6 := lookupPublicIP("tcp6", a.log, usePublicDNS)
+		ipv4 := lookupPublicIP("tcp4", a.log, usePublicDNSResolver(cfg))
+		ipv6 := lookupPublicIP("tcp6", a.log, usePublicDNSResolver(cfg))
 		a.mu.Lock()
 		if ipv4 != "" {
 			a.probes.IPv4 = ipv4
@@ -1211,22 +1164,96 @@ func (a *Agent) publicIPWorker(ctx context.Context) {
 	}
 }
 
-func (a *Agent) buildProbeMetadata(cfg Config, probes ProbeSnapshot) map[string]ProbeMetadata {
-	results := []ProbeResult{probes.CT, probes.CU, probes.CM, probes.BD, probes.Node1, probes.Node2, probes.Node3, probes.Node4}
-	keys := []string{"ct", "cu", "cm", "bd", "node_1", "node_2", "node_3", "node_4"}
-	targets := probeTargets(cfg)
-	meta := make(map[string]ProbeMetadata)
-	for i, r := range results {
-		if targets[i] == "" {
-			continue
-		}
-		ts := r.SampledAt
-		if ts > 0 {
-			ts = a.clock.correctLocalTimestamp(ts, time.Now())
-		}
-		meta[keys[i]] = ProbeMetadata{SampledAt: ts, Samples: r.Samples, Lost: r.Lost, WindowSeconds: int(metricsProbeWindow / time.Second), Mode: cfg.PingMode, Problem: r.Problem}
+func probeTarget(cfg Config, key string) string {
+	switch key {
+	case "ct":
+		return cfg.CTNode
+	case "cu":
+		return cfg.CUNode
+	case "cm":
+		return cfg.CMNode
+	case "bd":
+		return cfg.BDNode
+	case "node_1":
+		return cfg.Node1
+	case "node_2":
+		return cfg.Node2
+	case "node_3":
+		return cfg.Node3
+	case "node_4":
+		return cfg.Node4
 	}
-	return meta
+	return ""
+}
+
+func (a *Agent) runProbeWorker(ctx context.Context, key string) {
+	var history rollingProbeHistory
+	ticker := time.NewTicker(metricsProbeInterval)
+	defer ticker.Stop()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		cfg := a.configSnapshot()
+		target := strings.TrimSpace(probeTarget(cfg, key))
+		result := ProbeResult{}
+		var metadata map[string]any
+		if target != "" {
+			measured := measureProbe(cfg.PingMode, target, 1, defaultMetricsTCPPort, a.log)
+			now := time.Now()
+			history.add(now, probeHistoryKey(cfg.PingMode, target), measured)
+			result = history.latestSnapshot(now)
+			lost := 0
+			for _, sample := range history.samples {
+				if !sample.result.OK {
+					lost++
+				}
+			}
+			metadata = map[string]any{
+				"mode": cfg.PingMode, "target": target,
+				"sampled_at": now.UnixMilli(),
+				"samples":    len(history.samples), "lost": lost,
+				"window_seconds": 60, "problem": "",
+			}
+		} else {
+			history = rollingProbeHistory{}
+		}
+		a.mu.Lock()
+		switch key {
+		case "ct":
+			a.probes.CT = result
+		case "cu":
+			a.probes.CU = result
+		case "cm":
+			a.probes.CM = result
+		case "bd":
+			a.probes.BD = result
+		case "node_1":
+			a.probes.Node1 = result
+		case "node_2":
+			a.probes.Node2 = result
+		case "node_3":
+			a.probes.Node3 = result
+		case "node_4":
+			a.probes.Node4 = result
+		}
+		nextMeta := make(map[string]any, len(a.probes.Meta)+1)
+		for k, v := range a.probes.Meta {
+			nextMeta[k] = v
+		}
+		if metadata == nil {
+			delete(nextMeta, key)
+		} else {
+			nextMeta[key] = metadata
+		}
+		a.probes.Meta = nextMeta
+		a.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 var remoteBodyRE = regexp.MustCompile(`^[A-Za-z0-9_=&.,:%+\-\*\?\[\]]*$`)
